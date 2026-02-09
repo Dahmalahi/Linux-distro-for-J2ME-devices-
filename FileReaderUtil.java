@@ -1,102 +1,92 @@
-import java.io.*;
 import javax.microedition.io.*;
 import javax.microedition.io.file.*;
+import javax.microedition.rms.*;
+import java.io.*;
 
 public class FileReaderUtil {
     private static final String[] PATHS = {
-        "file:///TFCard/",
         "file:///SDCard/",
+        "file:///MemoryCard/",
         "file:///root1/",
         "file:///E:/",
-        "file:///MemoryCard/"
+        "file:///C:/"
     };
-    
+
     public static String readFile(String filename) {
-        FileConnection fc = null;
-        InputStream is = null;
+        // Essayer JSR-75 d'abord
+        String result = readFileJSR75(filename);
+        if (result != null && !result.startsWith("Erreur")) {
+            return result;
+        }
         
-        // Essayer chaque chemin
+        // Fallback RMS si JSR-75 échoue
+        return readFromRecordStore(filename);
+    }
+
+    private static String readFileJSR75(String filename) {
+        InputStream is = null;
+        FileConnection fc = null;
+        
         for (int i = 0; i < PATHS.length; i++) {
+            String path = PATHS[i] + filename;
             try {
-                String path = PATHS[i] + filename;
                 fc = (FileConnection) Connector.open(path, Connector.READ);
-                
-                if (!fc.exists()) {
-                    try {
-                        if (fc != null) fc.close();
-                    } catch (Exception ex) {}
-                    continue; // Essayer le prochain chemin
-                }
-                
-                long fileSize = fc.fileSize();
-                if (fileSize > 10240) { // 10KB max
+                if (fc.exists() && !fc.isDirectory()) {  // CORRECTION ICI: isFile() → !isDirectory()
+                    if (fc.fileSize() > 10240) { // 10KB max
+                        fc.close();
+                        return "Fichier trop volumineux (>10KB)";
+                    }
+                    
+                    is = fc.openInputStream();
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[512];
+                    int len;
+                    while ((len = is.read(buffer)) > 0) {
+                        baos.write(buffer, 0, len);
+                    }
+                    String content = new String(baos.toByteArray());
+                    
+                    // Fermer proprement
+                    if (is != null) is.close();
                     if (fc != null) fc.close();
-                    return "Fichier trop volumineux (>10KB)";
+                    return content;
                 }
-                
-                is = fc.openInputStream();
-                byte[] data = new byte[(int) fileSize];
-                int bytesRead = is.read(data);
-                
-                String content = new String(data, 0, bytesRead);
-                
-                // Fermer proprement
-                if (is != null) is.close();
                 if (fc != null) fc.close();
-                
-                return content;
-                
             } catch (Exception e) {
                 try {
                     if (is != null) is.close();
                     if (fc != null) fc.close();
                 } catch (Exception ex) {}
-                
-                // Si c'est le dernier chemin, essayer RMS
-                if (i == PATHS.length - 1) {
-                    return readFromRecordStore(filename);
-                }
+                // Continuer avec le prochain chemin
             }
         }
-        
         return "Fichier non trouve: " + filename;
     }
-    
-    // Alternative RecordStore
+
     public static String readFromRecordStore(String key) {
         try {
-            javax.microedition.rms.RecordStore rs = 
-                javax.microedition.rms.RecordStore.openRecordStore("DiscoData", false);
-            
+            RecordStore rs = RecordStore.openRecordStore("DiscoData", true);
             if (rs.getNumRecords() == 0) {
                 rs.closeRecordStore();
                 return "Aucune donnee trouvee";
             }
             
-            // Chercher la clé
-            javax.microedition.rms.RecordEnumeration re = rs.enumerateRecords(null, null, false);
-            
+            RecordEnumeration re = rs.enumerateRecords(null, null, false);
             while (re.hasNextElement()) {
                 int id = re.nextRecordId();
-                byte[] rec = rs.getRecord(id);
-                String recStr = new String(rec);
-                
-                if (recStr.startsWith(key + ":")) {
+                byte[] data = rs.getRecord(id);
+                String entry = new String(data);
+                int sep = entry.indexOf(':');
+                if (sep > 0 && entry.substring(0, sep).equals(key)) {
                     rs.closeRecordStore();
-                    // Extraire la valeur après ":"
-                    int colonIndex = recStr.indexOf(':');
-                    if (colonIndex != -1 && colonIndex < recStr.length() - 1) {
-                        return recStr.substring(colonIndex + 1);
-                    }
-                    return recStr;
+                    return entry.substring(sep + 1);
                 }
             }
-            
             rs.closeRecordStore();
             return "Cle non trouvee: " + key;
             
         } catch (Exception e) {
-            return "Erreur lecture RMS: " + e.getMessage();
+            return "Erreur RMS: " + e.getMessage();
         }
     }
 }

@@ -8,14 +8,13 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
     private double firstNumber = 0;
     private boolean newNumber = true;
     private boolean calculating = false;
-    
     private Vector history;
     private boolean showHistory = false;
-    
+
     private Command clearCmd, backCmd, historyCmd;
     private Thread displayThread;
     private boolean running = true;
-    
+
     public CalculatorApp(DiscoOs app) {
         this.mainApp = app;
         this.history = new Vector();
@@ -29,14 +28,14 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
         addCommand(backCmd);
         setCommandListener(this);
     }
-    
+
     public void show() {
         mainApp.getDisplay().setCurrent(this);
         running = true;
         displayThread = new Thread(this);
         displayThread.start();
     }
-    
+
     public void run() {
         while (running) {
             try {
@@ -45,7 +44,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             } catch (InterruptedException e) {}
         }
     }
-    
+
     protected void paint(Graphics g) {
         int w = getWidth();
         int h = getHeight();
@@ -123,7 +122,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
         g.drawString("Effacer", 2, h - 2, Graphics.LEFT | Graphics.BOTTOM);
         g.drawString("Retour", w - 2, h - 2, Graphics.RIGHT | Graphics.BOTTOM);
     }
-    
+
     private void paintHistory(Graphics g, int w, int h) {
         g.setColor(ThemeManager.getBackgroundColor());
         g.fillRect(0, 0, w, h);
@@ -151,7 +150,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
         g.setColor(ThemeManager.getAccentColor());
         g.drawString("Appuyez sur une touche", w/2, h - 20, Graphics.HCENTER | Graphics.BOTTOM);
     }
-    
+
     protected void keyPressed(int keyCode) {
         if (showHistory) {
             showHistory = false;
@@ -211,7 +210,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             }
         }
     }
-    
+
     private void appendDigit(String digit) {
         if (newNumber) {
             display = digit;
@@ -227,7 +226,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             }
         }
     }
-    
+
     private void appendDecimal() {
         if (display.indexOf('.') == -1) {
             if (newNumber) {
@@ -238,7 +237,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             }
         }
     }
-    
+
     private void setOperator(String op) {
         calculating = true;
         try {
@@ -246,6 +245,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             if (operator.length() > 0 && !newNumber) {
                 calculate();
             } else {
+                // CORRECTION CLDC 1.1: Double.parseDouble() est supporté
                 firstNumber = Double.parseDouble(display);
             }
             
@@ -259,7 +259,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             calculating = false;
         }
     }
-    
+
     private void calculate() {
         if (operator.length() == 0 || newNumber) {
             calculating = false;
@@ -269,6 +269,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
         calculating = true;
         
         try {
+            // CORRECTION CLDC 1.1: Double.parseDouble() est supporté
             double secondNumber = Double.parseDouble(display);
             double result = 0;
             boolean error = false;
@@ -291,15 +292,9 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             }
             
             if (!error) {
-                // Formater le résultat
-                if (result == (long) result) {
-                    display = String.valueOf((long) result);
-                } else {
-                    display = String.valueOf(result);
-                    if (display.length() > 12) {
-                        display = display.substring(0, 12);
-                    }
-                }
+                // CORRECTION CLDC 1.1: String.valueOf(double) NON SUPPORTÉ
+                // Conversion manuelle avec arrondi à 2 décimales
+                display = formatDouble(result);
                 
                 // Ajouter à l'historique
                 calcStr += display;
@@ -322,7 +317,26 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
             calculating = false;
         }
     }
-    
+
+    // CORRECTION CLDC 1.1: Conversion manuelle double → String
+    private String formatDouble(double value) {
+        // Gérer les valeurs entières
+        if (value == (long) value) {
+            return String.valueOf((long) value);
+        }
+        
+        // Arrondir à 2 décimales
+        long whole = (long) value;
+        int frac = (int) Math.abs((value - whole) * 100 + 0.5); // +0.5 pour arrondir
+        
+        // Gérer les valeurs négatives
+        if (value < 0 && whole == 0) {
+            return "-0." + (frac < 10 ? "0" : "") + frac;
+        }
+        
+        return whole + "." + (frac < 10 ? "0" : "") + frac;
+    }
+
     private void clear() {
         display = "0";
         operator = "";
@@ -330,7 +344,7 @@ public class CalculatorApp extends Canvas implements CommandListener, Runnable {
         newNumber = true;
         calculating = false;
     }
-    
+
     public void commandAction(Command c, Displayable d) {
         if (c == clearCmd) {
             clear();

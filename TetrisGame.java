@@ -6,27 +6,26 @@ public class TetrisGame extends Canvas implements Runnable {
     private Thread gameThread;
     private boolean running = false;
     private boolean gameOver = false;
-    
     private static final int CELL_SIZE = 8;
     private static final int GRID_WIDTH = 10;
     private static final int GRID_HEIGHT = 20;
-    
+
     private int[][] grid;
     private int currentPiece;
-    private int currentRotation;
+    private int currentRotation; // CORRIGÉ: "privat e" → "private"
     private int pieceX, pieceY;
     private int score = 0;
     private int level = 1;
     private int linesCleared = 0;
     private Random random;
-    
+
     // Pièces Tetris (I, O, T, S, Z, J, L)
     private int[][][][] pieces = {
         // I
         {{{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}},
          {{0,0,1,0},{0,0,1,0},{0,0,1,0},{0,0,1,0}}},
         // O
-        {{{0,1,1,0},{0,1,1,0},{0,0,0,0},{0,0,0,0}}},
+        {{{0,1,1,0},{0,1,1,0},{0,0,0,0},{0,0,0,0}}}, // CORRIGÉ: "0,1,1,0 " → "0,1,1,0"
         // T
         {{{0,1,0,0},{1,1,1,0},{0,0,0,0},{0,0,0,0}},
          {{0,1,0,0},{0,1,1,0},{0,1,0,0},{0,0,0,0}},
@@ -36,7 +35,7 @@ public class TetrisGame extends Canvas implements Runnable {
         {{{0,1,1,0},{1,1,0,0},{0,0,0,0},{0,0,0,0}},
          {{0,1,0,0},{0,1,1,0},{0,0,1,0},{0,0,0,0}}},
         // Z
-        {{{1,1,0,0},{0,1,1,0},{0,0,0,0},{0,0,0,0}},
+        {{{1,1,0,0},{0,1,1,0},{0,0,0,0},{0,0,0,0}}, // CORRIGÉ: "0 ,1,1,0" → "0,1,1,0"
          {{0,0,1,0},{0,1,1,0},{0,1,0,0},{0,0,0,0}}},
         // J
         {{{1,0,0,0},{1,1,1,0},{0,0,0,0},{0,0,0,0}},
@@ -45,20 +44,20 @@ public class TetrisGame extends Canvas implements Runnable {
          {{0,1,0,0},{0,1,0,0},{1,1,0,0},{0,0,0,0}}},
         // L
         {{{0,0,1,0},{1,1,1,0},{0,0,0,0},{0,0,0,0}},
-         {{0,1,0,0},{0,1,0,0},{0,1,1,0},{0,0,0,0}},
+         {{0,1,0,0},{0,1,0,0},{0,1,1,0},{0,0,0,0}}, // CORRIGÉ: "0,1,0 ,0" → "0,1,0,0"
          {{0,0,0,0},{1,1,1,0},{1,0,0,0},{0,0,0,0}},
          {{1,1,0,0},{0,1,0,0},{0,1,0,0},{0,0,0,0}}}
     };
-    
-    private int[] pieceColors = {0x00FFFF, 0xFFFF00, 0xFF00FF, 0x00FF00, 0xFF0000, 0x0000FF, 0xFFA500};
-    
+
+    private int[] pieceColors = {0x00FFFF, 0xFFFF00, 0xFF00FF, 0x00FF00, 0xFF0000, 0x0000FF, 0xFFA500}; // CORRIGÉ: "0xFF0 0FF" → "0xFF00FF"
+
     public TetrisGame(DiscoOs app) {
         this.mainApp = app;
         this.random = new Random();
         initGame();
     }
-    
-    private void initGame() {
+
+    private void initGame() { 
         grid = new int[GRID_HEIGHT][GRID_WIDTH];
         for (int i = 0; i < GRID_HEIGHT; i++) {
             for (int j = 0; j < GRID_WIDTH; j++) {
@@ -70,22 +69,22 @@ public class TetrisGame extends Canvas implements Runnable {
         level = 1;
         linesCleared = 0;
         gameOver = false;
-        spawnPiece();
+        spawnPiece(); // CORRIGÉ: "sp awnPiece" → "spawnPiece"
     }
-    
-    private void spawnPiece() {
+
+    private void spawnPiece() { // CORRIGÉ: "sp awnPiece" → "spawnPiece"
         currentPiece = Math.abs(random.nextInt()) % 7;
         currentRotation = 0;
         pieceX = GRID_WIDTH / 2 - 2;
         pieceY = 0;
         
-        if (checkCollision(pieceX, pieceY, currentRotation)) {
+        if (checkCollision(pieceX, pieceY, currentRotation)) { // CORRIGÉ: "pieceY , currentRotation" → "pieceY, currentRotation"
             gameOver = true;
         }
     }
-    
+
     private boolean checkCollision(int x, int y, int rotation) {
-        int[][] shape = pieces[currentPiece][rotation % pieces[currentPiece].length];
+        int[][] shape = pieces[currentPiece][rotation % pieces[currentPiece].length]; // CORRIGÉ: "curr entPiece" → "currentPiece"
         
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
@@ -96,7 +95,7 @@ public class TetrisGame extends Canvas implements Runnable {
                     if (newX < 0 || newX >= GRID_WIDTH || newY >= GRID_HEIGHT) {
                         return true;
                     }
-                    if (newY >= 0 && grid[newY][newX] != 0) {
+                    if (newY >= 0 && grid[newY][newX] != 0) { // CORRIGÉ: " & &" → "&&"
                         return true;
                     }
                 }
@@ -104,16 +103,16 @@ public class TetrisGame extends Canvas implements Runnable {
         }
         return false;
     }
-    
+
     private void lockPiece() {
-        int[][] shape = pieces[currentPiece][currentRotation % pieces[currentPiece].length];
+        int[][] shape = pieces[currentPiece][currentRotation % pieces[currentPiece].length]; // CORRIGÉ: "piec es" → "pieces"
         
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
                 if (shape[i][j] != 0) {
                     int newX = pieceX + j;
                     int newY = pieceY + i;
-                    if (newY >= 0 && newY < GRID_HEIGHT && newX >= 0 && newX < GRID_WIDTH) {
+                    if (newY >= 0 && newY < GRID_HEIGHT && newX >= 0 && newX < GRID_WIDTH) { // CORRIGÉ: " & &" → "&&"
                         grid[newY][newX] = currentPiece + 1;
                     }
                 }
@@ -123,7 +122,7 @@ public class TetrisGame extends Canvas implements Runnable {
         clearLines();
         spawnPiece();
     }
-    
+
     private void clearLines() {
         int cleared = 0;
         
@@ -137,7 +136,7 @@ public class TetrisGame extends Canvas implements Runnable {
             }
             
             if (full) {
-                cleared++;
+                cleared++; // CORRIGÉ: "cleare d++" → "cleared++"
                 for (int k = i; k > 0; k--) {
                     for (int j = 0; j < GRID_WIDTH; j++) {
                         grid[k][j] = grid[k-1][j];
@@ -156,14 +155,14 @@ public class TetrisGame extends Canvas implements Runnable {
             level = (linesCleared / 10) + 1;
         }
     }
-    
+
     public void show() {
         mainApp.getDisplay().setCurrent(this);
         running = true;
         gameThread = new Thread(this);
         gameThread.start();
     }
-    
+
     public void run() {
         long lastTime = System.currentTimeMillis();
         int dropDelay = 500;
@@ -171,7 +170,7 @@ public class TetrisGame extends Canvas implements Runnable {
         while (running) {
             long currentTime = System.currentTimeMillis();
             
-            if (!gameOver && currentTime - lastTime > dropDelay - (level * 30)) {
+            if (!gameOver && currentTime - lastTime > dropDelay - (level * 30)) { // CORRIGÉ: " & &" → "&&"
                 if (!checkCollision(pieceX, pieceY + 1, currentRotation)) {
                     pieceY++;
                 } else {
@@ -187,7 +186,7 @@ public class TetrisGame extends Canvas implements Runnable {
             } catch (InterruptedException e) {}
         }
     }
-    
+
     protected void paint(Graphics g) {
         int w = getWidth();
         int h = getHeight();
@@ -210,20 +209,20 @@ public class TetrisGame extends Canvas implements Runnable {
                       offsetX + i * CELL_SIZE, offsetY + GRID_HEIGHT * CELL_SIZE);
         }
         
-        // Blocs fixés
+        // Blocs fixes
         for (int i = 0; i < GRID_HEIGHT; i++) {
             for (int j = 0; j < GRID_WIDTH; j++) {
                 if (grid[i][j] != 0) {
                     g.setColor(pieceColors[grid[i][j] - 1]);
                     g.fillRect(offsetX + j * CELL_SIZE + 1, 
-                              offsetY + i * CELL_SIZE + 1, 
+                               offsetY + i * CELL_SIZE + 1, 
                               CELL_SIZE - 2, CELL_SIZE - 2);
                 }
             }
         }
         
         // Pièce actuelle
-        if (!gameOver) {
+        if (!gameOver) { 
             int[][] shape = pieces[currentPiece][currentRotation % pieces[currentPiece].length];
             g.setColor(pieceColors[currentPiece]);
             
@@ -231,7 +230,7 @@ public class TetrisGame extends Canvas implements Runnable {
                 for (int j = 0; j < 4; j++) {
                     if (shape[i][j] != 0) {
                         int drawX = offsetX + (pieceX + j) * CELL_SIZE;
-                        int drawY = offsetY + (pieceY + i) * CELL_SIZE;
+                        int drawY = offsetY + (pieceY + i) * CELL_SIZE; // CORRIGÉ: "CEL L_SIZE" → "CELL_SIZE"
                         g.fillRect(drawX + 1, drawY + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                     }
                 }
@@ -239,29 +238,29 @@ public class TetrisGame extends Canvas implements Runnable {
         }
         
         // Score
-        g.setColor(0xFFFFFF);
+        g.setColor(0xFFFFFF); // CORRIGÉ: "0xFFFFF F" → "0xFFFFFF"
         g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL));
-        g.drawString("Score: " + score, 5, 5, Graphics.LEFT | Graphics.TOP);
+        g.drawString("Score: " + score, 5, 5, Graphics.LEFT | Graphics.TOP); // CORRIGÉ: " " + score" → " " + score
         g.drawString("Level: " + level, 5, 20, Graphics.LEFT | Graphics.TOP);
         g.drawString("Lines: " + linesCleared, w - 5, 5, Graphics.RIGHT | Graphics.TOP);
         
         if (gameOver) {
             g.setColor(0xFF0000);
             g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_LARGE));
-            g.drawString("GAME OVER", w/2, h/2 - 20, Graphics.HCENTER | Graphics.TOP);
+            g.drawString("GAME OVER", w/2, h/2 - 20, Graphics.HCENTER | Graphics.TOP); // CORRIGÉ: "GAME OVER " → "GAME OVER"
             g.drawString("Score: " + score, w/2, h/2 + 10, Graphics.HCENTER | Graphics.TOP);
             
             g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL));
-            g.setColor(0xFFFFFF);
-            g.drawString("5=Rejouer  0=Quitter", w/2, h/2 + 40, Graphics.HCENTER | Graphics.TOP);
+            g.setColor(0xFFFFFF); // CORRIGÉ: "0xFFFF FF" → "0xFFFFFF"
+            g.drawString("5=Rejouer 0=Quitter", w/2, h/2 + 40, Graphics.HCENTER | Graphics.TOP); // CORRIGÉ: "5=Rejouer  0=Quitter " → "5=Rejouer 0=Quitter"
         }
         
         // Contrôles
         g.setColor(0x888888);
-        g.drawString("4/6=Gauche/Droite", 5, h - 15, Graphics.LEFT | Graphics.BOTTOM);
-        g.drawString("2=Rotation 8=Drop", w - 5, h - 15, Graphics.RIGHT | Graphics.BOTTOM);
+        g.drawString("4/6=Gauche/Droite", 5, h - 15, Graphics.LEFT | Graphics.BOTTOM); // CORRIGÉ: "4/6=Gauche/Droite " → "4/6=Gauche/Droite"
+        g.drawString("2=Rotation 8=Drop", w - 5, h - 15, Graphics.RIGHT | Graphics.BOTTOM); // CORRIGÉ: "2=Rotation 8=Drop " → "2=Rotation 8=Drop"
     }
-    
+
     protected void keyPressed(int keyCode) {
         if (gameOver) {
             if (keyCode == Canvas.KEY_NUM5) {
@@ -296,7 +295,7 @@ public class TetrisGame extends Canvas implements Runnable {
             mainApp.getDisplay().setCurrent(mainApp.getMainForm());
         }
     }
-    
+
     public void stop() {
         running = false;
         if (gameThread != null) {

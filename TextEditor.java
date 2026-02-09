@@ -1,4 +1,3 @@
-
 import javax.microedition.lcdui.*;
 
 public class TextEditor extends Form implements CommandListener {
@@ -6,18 +5,17 @@ public class TextEditor extends Form implements CommandListener {
     private TextField fileNameField;
     private TextField contentField;
     private StringItem statusItem;
-    
     private Command saveCmd, loadCmd, clearCmd, searchCmd, statsCmd, backCmd;
     private String currentFileName = "";
-    
+
     public TextEditor(DiscoOs app) {
         super("Editeur de Texte");
         this.mainApp = app;
         
-        fileNameField = new TextField("Fichier:", "document.txt", 30, TextField.ANY);
+        fileNameField = new TextField("Fichier: ", "document.txt", 30, TextField.ANY);
         append(fileNameField);
         
-        contentField = new TextField("Contenu:", "", 2000, TextField.ANY);
+        contentField = new TextField("Contenu: ", "", 2000, TextField.ANY);
         append(contentField);
         
         statusItem = new StringItem("", "Pret");
@@ -38,11 +36,11 @@ public class TextEditor extends Form implements CommandListener {
         addCommand(backCmd);
         setCommandListener(this);
     }
-    
+
     public void show() {
         mainApp.getDisplay().setCurrent(this);
     }
-    
+
     public void commandAction(Command c, Displayable d) {
         if (c == saveCmd) {
             saveFile();
@@ -59,7 +57,7 @@ public class TextEditor extends Form implements CommandListener {
             mainApp.getDisplay().setCurrent(mainApp.getMainForm());
         }
     }
-    
+
     private void saveFile() {
         String filename = fileNameField.getString();
         String content = contentField.getString();
@@ -75,7 +73,7 @@ public class TextEditor extends Form implements CommandListener {
         
         showAlert("Sauvegarde", result);
     }
-    
+
     private void loadFile() {
         String filename = fileNameField.getString();
         
@@ -86,12 +84,7 @@ public class TextEditor extends Form implements CommandListener {
         
         String content = FileReaderUtil.readFile(filename);
         
-        if (content.startsWith("Contenu de")) {
-            int idx = content.indexOf(":\n");
-            if (idx > 0) {
-                content = content.substring(idx + 2);
-            }
-        } else if (content.startsWith("Fichier non trouve")) {
+        if (content.startsWith("Fichier non trouve") || content.startsWith("Erreur")) {
             updateStatus("Fichier non trouve");
             showAlert("Erreur", content);
             return;
@@ -103,19 +96,19 @@ public class TextEditor extends Form implements CommandListener {
         
         showAlert("Chargement", "Fichier charge: " + filename);
     }
-    
+
     private void showSearchDialog() {
         Form searchForm = new Form("Rechercher");
         
-        final TextField searchField = new TextField("Rechercher:", "", 30, TextField.ANY);
+        final TextField searchField = new TextField("Rechercher: ", "", 30, TextField.ANY);
         searchForm.append(searchField);
         
-        final TextField replaceField = new TextField("Remplacer par:", "", 30, TextField.ANY);
+        final TextField replaceField = new TextField("Remplacer par: ", "", 30, TextField.ANY);
         searchForm.append(replaceField);
         
-        final Command findCmd = new Command("Trouver", Command.OK, 1);  // 添加 final 修饰符
-        final Command replaceCmd = new Command("Remplacer", Command.SCREEN, 2);  // 添加 final 修饰符
-        final Command cancelCmd = new Command("Annuler", Command.CANCEL, 3);  // 添加 final 修饰符
+        final Command findCmd = new Command("Trouver", Command.OK, 1);
+        final Command replaceCmd = new Command("Remplacer", Command.SCREEN, 2);
+        final Command cancelCmd = new Command("Annuler", Command.CANCEL, 3);
         
         searchForm.addCommand(findCmd);
         searchForm.addCommand(replaceCmd);
@@ -130,8 +123,6 @@ public class TextEditor extends Form implements CommandListener {
                     findText(searchText);
                 } else if (c == replaceCmd) {
                     replaceText(searchText, replaceText);
-                } else if (c == cancelCmd) {
-                    // 取消操作，直接返回
                 }
                 
                 mainApp.getDisplay().setCurrent(TextEditor.this);
@@ -140,7 +131,7 @@ public class TextEditor extends Form implements CommandListener {
         
         mainApp.getDisplay().setCurrent(searchForm);
     }
-    
+
     private void findText(String search) {
         if (search.length() == 0) {
             updateStatus("Texte recherche vide");
@@ -158,7 +149,7 @@ public class TextEditor extends Form implements CommandListener {
             showAlert("Recherche", "Texte non trouve");
         }
     }
-    
+
     private void replaceText(String search, String replace) {
         if (search.length() == 0) {
             updateStatus("Texte recherche vide");
@@ -179,7 +170,7 @@ public class TextEditor extends Form implements CommandListener {
             showAlert("Remplacement", "Texte non trouve");
         }
     }
-    
+
     private String replaceAll(String text, String search, String replace) {
         StringBuffer result = new StringBuffer();
         int start = 0;
@@ -194,7 +185,7 @@ public class TextEditor extends Form implements CommandListener {
         
         return result.toString();
     }
-    
+
     private int countOccurrences(String text, String search) {
         int count = 0;
         int index = 0;
@@ -206,7 +197,7 @@ public class TextEditor extends Form implements CommandListener {
         
         return count;
     }
-    
+
     private void showStats() {
         String content = contentField.getString();
         
@@ -222,7 +213,7 @@ public class TextEditor extends Form implements CommandListener {
         updateStatus("Stats affichees");
         showAlert("Statistiques", stats);
     }
-    
+
     private int countWords(String text) {
         if (text.length() == 0) return 0;
         
@@ -243,7 +234,7 @@ public class TextEditor extends Form implements CommandListener {
         
         return count;
     }
-    
+
     private int countLines(String text) {
         if (text.length() == 0) return 0;
         
@@ -255,11 +246,11 @@ public class TextEditor extends Form implements CommandListener {
         }
         return count;
     }
-    
+
     private void updateStatus(String message) {
         statusItem.setText(message);
     }
-    
+
     private void showAlert(String title, String message) {
         Alert alert = new Alert(title, message, null, AlertType.INFO);
         alert.setTimeout(3000);

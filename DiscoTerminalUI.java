@@ -1,51 +1,111 @@
 import javax.microedition.lcdui.*;
 import java.util.Vector;
 
+/**
+ * DiscoTerminalUI.java
+ * Terminal avec T9 sur clavier PHYSIQUE numerique
+ * 
+ * MAPPING TOUCHES:
+ * 0-9 physiques = T9 multi-tap (2=abc, 3=def, etc.)
+ * # = Backspace (DEL)
+ * * = Menu
+ * Fire/OK = Executer commande
+ * Touches directionnelles (joystick) = Navigation historique/scroll
+ */
 public class DiscoTerminalUI extends Canvas implements Runnable {
     private Display display;
     private DiscoOs mainApp;
-    private DiscoTerminalCore core;
+    protected DiscoTerminalCore core;
     
+    // Saisie T9
+    private T9Input t9;
+    
+    // Threads
     private Thread cursorThread;
+    private Thread timeoutThread;
     private boolean running = true;
-
-    private String inputBuffer = "";
-    private int cursorPos = 0;
     private boolean cursorVisible = true;
-
-    // MENU LEFT
-    private boolean leftMenuOpen = false;
-    private boolean symbolMenuOpen = false;
-    private int symbolPage = 0;
-    private static final int SYMBOLS_PER_PAGE = 10;
-
-    // T9
-    private long lastKeyTime = 0;
-    private int lastKeyCode = -1;
-    private int keyPressCount = 0;
-    private boolean t9ReplaceMode = false;
-
-    private String[] t9Letters = {
-        " 0", ".,!?1", "abc2", "def3", "ghi4",
-        "jkl5", "mno6", "pqrs7", "tuv8", "wxyz9"
+    
+    // Affichage
+    private Vector screenLines;
+    private static final int MAX_LINES = 100;
+    private int scrollOffset = 0;
+    
+    // Menus
+    private boolean menuOpen = false;
+    private int selectedMenuItem = 0;
+    private String[] menuItems = {
+        "1. EXEC (Fire)",
+        "2. CLEAR",
+        "3. HISTORIQUE",
+        "4. AUTO-COMP",
+        "5. MODE MAJ",
+        "6. MODE 123",
+        "0. QUITTER"
     };
-
-    // SYMBOLES COMPLETS
-    private String allSymbols = ".,?!:;-_\"'`~|\\/@%#&^*+=<>()[]{}$";
-    private String[] symbolShortcuts = {
-        "http://", "www.", ".com", ".net", ".org",
-        "@gmail.com", "@yahoo.com"
+    
+    // Auto-completion
+    private Vector completionList;
+    private int completionIndex = 0;
+    
+    // Commandes disponibles (60+ commandes!)
+    private static final String[] COMMANDS = {
+        // Fichiers
+        "ls", "cd", "pwd", "cat", "touch", "mkdir", "rmdir", "rm", "cp", "mv",
+        "find", "tree", "du", "df", "file", "stat",
+        // Texte
+        "echo", "grep", "wc", "head", "tail", "sort", "uniq", "cut", "tr", "rev",
+        // Systeme
+        "ps", "top", "kill", "date", "uptime", "who", "w", "whoami", "id",
+        "uname", "hostname", "reboot", "shutdown", "free",
+        // Reseau
+        "ping", "ifconfig", "netstat", "wget", "curl",
+        // Utilitaires
+        "calc", "cal", "bc", "factor", "seq", "yes", "true", "false", "sleep",
+        // Permissions
+        "chmod", "chown", "chgrp", "umask",
+        // Environnement
+        "env", "set", "export", "unset", "which", "whereis",
+        // Shell
+        "history", "alias", "unalias", "clear", "exit", "help", "man",
+        // Applications
+        "calculator", "editor", "edit", "snake", "tetris", "tasks", "http"
     };
-
+    
     public DiscoTerminalUI(DiscoOs app, String user) {
         this.mainApp = app;
         this.display = app.getDisplay();
         this.core = new DiscoTerminalCore(app, user);
+        this.t9 = new T9Input();
+        this.screenLines = new Vector();
+        this.completionList = new Vector();
         
+        addLine("DiscoLinux 2.5 (" + core.getHostname() + ")");
+        addLine("Type 'help' for commands");
+        addLine("");
+        addLine(core.getPrompt());
+        
+        setFullScreenMode(true);
+        startThreads();
+    }
+    
+    private void startThreads() {
         cursorThread = new Thread(this);
         cursorThread.start();
+        
+        timeoutThread = new Thread(new Runnable() {
+            public void run() {
+                while (running) {
+                    try {
+                        Thread.sleep(50);
+                repaint();         // Rafraîchir toujours
+                    } catch (InterruptedException e) {}
+                }
+            }
+        });
+        timeoutThread.start();
     }
-
+    
     public void run() {
         while (running) {
             try {
@@ -55,321 +115,463 @@ public class DiscoTerminalUI extends Canvas implements Runnable {
             } catch (InterruptedException e) {}
         }
     }
-
+    
     public void show() {
         display.setCurrent(this);
     }
-
+    
     protected void paint(Graphics g) {
         int w = getWidth();
         int h = getHeight();
-
+        
         g.setColor(ThemeManager.getBackgroundColor());
         g.fillRect(0, 0, w, h);
-
+        
+        Font font = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+        g.setFont(font);
+        
+        int lineHeight = font.getHeight() + 2;
+        int visibleLines = (h - 40) / lineHeight;
+        
         g.setColor(ThemeManager.getForegroundColor());
-        g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL));
-
-        int lh = g.getFont().getHeight();
-        int maxLines = (h - 40) / lh;
-
-        Vector screenLines = core.getScreenLines();
-        int start = Math.max(0, screenLines.size() - maxLines);
-
-        for (int i = start; i < screenLines.size(); i++) {
+        int startLine = Math.max(0, screenLines.size() - visibleLines - scrollOffset);
+        int endLine = Math.min(screenLines.size(), startLine + visibleLines);
+        
+        for (int i = startLine; i < endLine; i++) {
+            int y = (i - startLine) * lineHeight + 5;
             String line = (String) screenLines.elementAt(i);
-            g.drawString(line, 2, (i - start) * lh, Graphics.LEFT | Graphics.TOP);
-        }
-
-        int inputY = (screenLines.size() - start) * lh;
-        String inputLine = core.getPrompt() + inputBuffer;
-        g.drawString(inputLine, 2, inputY, Graphics.LEFT | Graphics.TOP);
-
-        if (cursorVisible) {
-            String beforeCursor = core.getPrompt() + inputBuffer.substring(0, cursorPos);
-            int cx = g.getFont().stringWidth(beforeCursor);
-            g.setColor(ThemeManager.getHighlightColor());
-            g.fillRect(cx + 2, inputY + lh - 2, 6, 2);
-        }
-
-        g.setColor(ThemeManager.getMenuColor());
-        g.drawString("MENU", 2, h - 2, Graphics.LEFT | Graphics.BOTTOM);
-        g.drawString("DEL", w - 2, h - 2, Graphics.RIGHT | Graphics.BOTTOM);
-
-        // MENU SYMBOLES
-        if (symbolMenuOpen) {
-            paintSymbolMenu(g, w, h);
-        }
-        // MENU PRINCIPAL
-        else if (leftMenuOpen) {
-            paintMainMenu(g, w, h);
-        }
-    }
-
-    private void paintSymbolMenu(Graphics g, int w, int h) {
-        int menuH = 140;
-        int menuY = h - menuH - 25;
-        
-        g.setColor(ThemeManager.getMenuColor());
-        g.fillRect(5, menuY, w - 10, menuH);
-        
-        g.setColor(ThemeManager.getForegroundColor());
-        g.drawRect(5, menuY, w - 10, menuH);
-        
-        g.drawString("SYMBOLES (*/# page)", 10, menuY + 5, Graphics.LEFT | Graphics.TOP);
-        
-        int startIdx = symbolPage * SYMBOLS_PER_PAGE;
-        int endIdx = Math.min(startIdx + SYMBOLS_PER_PAGE, allSymbols.length());
-        
-        int y = menuY + 20;
-        for (int i = startIdx; i < endIdx; i++) {
-            int num = (i - startIdx + 1) % 10;
-            g.drawString(num + ": " + allSymbols.charAt(i), 10, y, Graphics.LEFT | Graphics.TOP);
-            y += 12;
-        }
-        
-        if (symbolPage == (allSymbols.length() / SYMBOLS_PER_PAGE)) {
-            for (int i = 0; i < symbolShortcuts.length && i < 7; i++) {
-                int num = (i + 1);
-                g.drawString(num + ": " + symbolShortcuts[i], 10, y, Graphics.LEFT | Graphics.TOP);
-                y += 12;
+            
+            if (font.stringWidth(line) > w - 10) {
+                while (font.stringWidth(line + "...") > w - 10 && line.length() > 0) {
+                    line = line.substring(0, line.length() - 1);
+                }
+                line += "...";
             }
+            
+            g.drawString(line, 5, y, Graphics.LEFT | Graphics.TOP);
         }
         
-        g.drawString("Page " + (symbolPage + 1), w - 15, menuY + 5, Graphics.RIGHT | Graphics.TOP);
-    }
-
-    private void paintMainMenu(Graphics g, int w, int h) {
-        int menuW = w - 40;
-        int menuH = 100;
-        int menuX = 20;
-        int menuY = h - menuH - 30;
+        int inputY = h - 35;
         
         g.setColor(ThemeManager.getMenuColor());
-        g.fillRect(menuX, menuY, menuW, menuH);
+        g.fillRect(0, inputY - 2, w, lineHeight + 4);
+        
+        String prompt = core.getPrompt();
+        g.setColor(ThemeManager.getAccentColor());
+        g.setFont(Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_BOLD, Font.SIZE_SMALL));
+        g.drawString(prompt, 2, inputY, Graphics.LEFT | Graphics.TOP);
+        
+        int promptWidth = g.getFont().stringWidth(prompt);
+        String inputText = t9.getLiveText();
+        
+        String modeIndicator = "";
+        if (t9.isNumericMode()) {
+            modeIndicator = "[123]";
+        } else if (t9.isUpperCase()) {
+            modeIndicator = "[ABC]";
+        }
+        
+        g.setColor(ThemeManager.getHighlightColor());
+        g.drawString(modeIndicator, w - 40, inputY, Graphics.LEFT | Graphics.TOP);
         
         g.setColor(ThemeManager.getForegroundColor());
+        if (cursorVisible) {
+            g.drawString(inputText, promptWidth + 2, inputY, Graphics.LEFT | Graphics.TOP);
+        } else {
+            String textNoCursor = inputText;
+            if (textNoCursor.endsWith("_")) {
+                textNoCursor = textNoCursor.substring(0, textNoCursor.length() - 1);
+            }
+            g.drawString(textNoCursor, promptWidth + 2, inputY, Graphics.LEFT | Graphics.TOP);
+        }
+        
+        if (completionList.size() > 0 && !menuOpen) {
+            paintCompletions(g, w, h, inputY);
+        }
+        
+        if (menuOpen) {
+            paintMenu(g, w, h);
+        }
+        
+        paintSoftkeys(g, w, h);
+    }
+    
+    private void paintCompletions(Graphics g, int w, int h, int inputY) {
+        int compY = inputY - 10 - (completionList.size() * 12);
+        if (compY < 0) compY = inputY + 20;
+        
+        g.setColor(0x333333);
+        g.fillRect(5, compY, w - 10, completionList.size() * 12 + 4);
+        g.setColor(ThemeManager.getHighlightColor());
+        g.drawRect(5, compY, w - 10, completionList.size() * 12 + 4);
+        
+        g.setFont(Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL));
+        
+        for (int i = 0; i < Math.min(completionList.size(), 5); i++) {
+            String completion = (String) completionList.elementAt(i);
+            
+            if (i == completionIndex % completionList.size()) {
+                g.setColor(ThemeManager.getAccentColor());
+                g.fillRect(7, compY + 2 + i * 12, w - 14, 11);
+                g.setColor(ThemeManager.getBackgroundColor());
+            } else {
+                g.setColor(ThemeManager.getForegroundColor());
+            }
+            
+            g.drawString(completion, 10, compY + 2 + i * 12, Graphics.LEFT | Graphics.TOP);
+        }
+    }
+    
+    private void paintMenu(Graphics g, int w, int h) {
+        int menuW = Math.min(w - 20, 160);
+        int menuH = menuItems.length * 16 + 30;
+        int menuX = (w - menuW) / 2;
+        int menuY = (h - menuH) / 2;
+        
+        g.setColor(0x000000);
+        g.fillRect(menuX + 2, menuY + 2, menuW, menuH);
+        
+        g.setColor(0x222222);
+        g.fillRect(menuX, menuY, menuW, menuH);
+        g.setColor(ThemeManager.getHighlightColor());
         g.drawRect(menuX, menuY, menuW, menuH);
         
-        g.drawString("1. EXECUTER", menuX + 10, menuY + 10, Graphics.LEFT | Graphics.TOP);
-        g.drawString("2. EFFACER", menuX + 10, menuY + 30, Graphics.LEFT | Graphics.TOP);
-        g.drawString("3. CLEAR", menuX + 10, menuY + 50, Graphics.LEFT | Graphics.TOP);
-        g.drawString("4. SORTIR", menuX + 10, menuY + 70, Graphics.LEFT | Graphics.TOP);
+        g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM));
+        g.setColor(ThemeManager.getAccentColor());
+        g.drawString("TERMINAL MENU", menuX + menuW/2, menuY + 5, Graphics.HCENTER | Graphics.TOP);
+        
+        g.setFont(Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL));
+        int itemY = menuY + 25;
+        
+        for (int i = 0; i < menuItems.length; i++) {
+            if (i == selectedMenuItem) {
+                g.setColor(ThemeManager.getHighlightColor());
+                g.fillRect(menuX + 5, itemY - 2, menuW - 10, 14);
+                g.setColor(ThemeManager.getBackgroundColor());
+            } else {
+                g.setColor(ThemeManager.getForegroundColor());
+            }
+            
+            g.drawString(menuItems[i], menuX + 10, itemY, Graphics.LEFT | Graphics.TOP);
+            itemY += 16;
+        }
     }
-
+    
+    private void paintSoftkeys(Graphics g, int w, int h) {
+        g.setColor(ThemeManager.getMenuColor());
+        g.fillRect(0, h - 18, w, 18);
+        
+        g.setColor(ThemeManager.getForegroundColor());
+        g.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL));
+        
+        g.drawString("MENU", 2, h - 2, Graphics.LEFT | Graphics.BOTTOM);
+        g.drawString("EXEC", w/2, h - 2, Graphics.HCENTER | Graphics.BOTTOM);
+        g.drawString("DEL", w - 2, h - 2, Graphics.RIGHT | Graphics.BOTTOM);
+    }
+    
+    /**
+     * GESTION DES TOUCHES - CORRIGEE POUR T9 PHYSIQUE
+     * 
+     * LOGIQUE:
+     * 1. Touches 0-9 physiques = TOUJOURS T9 (jamais navigation!)
+     * 2. # = Backspace
+     * 3. * = Menu
+     * 4. Fire/OK = Executer
+     * 5. Touches directionnelles (joystick) = Navigation UNIQUEMENT
+     */
     protected void keyPressed(int keyCode) {
-        if (symbolMenuOpen) {
-            handleSymbolMenuKey(keyCode);
-            return;
-        }
-
-        if (keyCode == Canvas.KEY_STAR && !leftMenuOpen) {
-            symbolMenuOpen = true;
-            symbolPage = 0;
-            repaint();
-            return;
-        }
-
-        if (keyCode == -6) {
-            leftMenuOpen = !leftMenuOpen;
-            repaint();
-            return;
-        }
-
-        if (leftMenuOpen) {
-            handleMainMenuKey(keyCode);
-            return;
-        }
-
-        if (keyCode == -7) {
-            if (cursorPos > 0) {
-                inputBuffer = inputBuffer.substring(0, cursorPos - 1) + inputBuffer.substring(cursorPos);
-                cursorPos--;
-            }
-            resetT9();
-            repaint();
-            return;
-        }
-
-        if (keyCode == -5) {
-            executeCommand();
-            return;
-        }
-
-        if (keyCode == Canvas.KEY_NUM0) {
-            insertChar(' ');
-            resetT9();
-            return;
-        }
-
-        if (keyCode == Canvas.KEY_POUND) {
-            insertChar('#');
-            resetT9();
-            return;
-        }
-
-        int digit = -1;
-        if (keyCode >= Canvas.KEY_NUM1 && keyCode <= Canvas.KEY_NUM9) {
-            digit = keyCode - Canvas.KEY_NUM0;
-        }
-
-        if (digit >= 1 && digit <= 9) {
-            handleT9(digit);
-        }
-    }
-
-    private void handleSymbolMenuKey(int keyCode) {
-        if (keyCode == Canvas.KEY_STAR) {
-            symbolPage++;
-            int maxPages = (allSymbols.length() / SYMBOLS_PER_PAGE) + 1;
-            if (symbolPage > maxPages) symbolPage = 0;
-            repaint();
-            return;
-        }
-        if (keyCode == Canvas.KEY_POUND) {
-            symbolPage--;
-            if (symbolPage < 0) {
-                symbolPage = (allSymbols.length() / SYMBOLS_PER_PAGE);
-            }
-            repaint();
-            return;
-        }
-        
+        // TOUCHES NUMERIQUES 0-9 = T9 UNIQUEMENT
         if (keyCode >= Canvas.KEY_NUM0 && keyCode <= Canvas.KEY_NUM9) {
-            int num = keyCode - Canvas.KEY_NUM0;
-            if (num == 0) num = 10;
-            
-            int idx = (symbolPage * SYMBOLS_PER_PAGE) + num - 1;
-            
-            if (idx < allSymbols.length()) {
-                insertChar(allSymbols.charAt(idx));
-                symbolMenuOpen = false;
-                repaint();
-                return;
-            } else if (symbolPage == (allSymbols.length() / SYMBOLS_PER_PAGE)) {
-                int shortcutIdx = num - 1;
-                if (shortcutIdx < symbolShortcuts.length) {
-                    insertString(symbolShortcuts[shortcutIdx]);
-                    symbolMenuOpen = false;
-                    repaint();
-                    return;
+            if (menuOpen) {
+                int num = keyCode - Canvas.KEY_NUM0;
+                if (num < menuItems.length) {
+                    selectedMenuItem = num;
+                    executeMenuItem();
                 }
+                return;
             }
+            
+            // T9 multi-tap
+            int num = keyCode - Canvas.KEY_NUM0;
+            t9.keyPressed(num);
+            updateCompletions();
+            repaint();
+            return;
         }
         
-        if (keyCode == -7 || keyCode == -6) {
-            symbolMenuOpen = false;
+        // TOUCHE * = MENU
+        if (keyCode == Canvas.KEY_STAR || keyCode == -6) {
+            toggleMenu();
+            return;
+        }
+        
+        // TOUCHE # = BACKSPACE
+        if (keyCode == Canvas.KEY_POUND || keyCode == -7) {
+            t9.backspace();
+            updateCompletions();
+            repaint();
+            return;
+        }
+        
+        // FIRE/OK = EXECUTER
+        if (keyCode == -5) {
+            if (menuOpen) {
+                executeMenuItem();
+            } else {
+                executeCommand();
+            }
+            return;
+        }
+        
+        // TOUCHES DIRECTIONNELLES (joystick ou fleches)
+        // Ces touches ne sont PAS 2468!
+        int gameAction = getGameAction(keyCode);
+        
+        if (menuOpen) {
+            if (gameAction == Canvas.UP) {
+                selectedMenuItem = (selectedMenuItem - 1 + menuItems.length) % menuItems.length;
+                repaint();
+            } else if (gameAction == Canvas.DOWN) {
+                selectedMenuItem = (selectedMenuItem + 1) % menuItems.length;
+                repaint();
+            }
+            return;
+        }
+        
+        // Historique (UP/DOWN)
+        if (gameAction == Canvas.UP) {
+            navigateHistory(-1);
+            return;
+        }
+        if (gameAction == Canvas.DOWN) {
+            navigateHistory(1);
+            return;
+        }
+        
+        // Scroll (LEFT/RIGHT)
+        if (gameAction == Canvas.LEFT) {
+            scrollOffset = Math.min(scrollOffset + 1, screenLines.size() - 5);
+            repaint();
+            return;
+        }
+        if (gameAction == Canvas.RIGHT) {
+            scrollOffset = Math.max(scrollOffset - 1, 0);
             repaint();
             return;
         }
     }
-
-    private void handleMainMenuKey(int keyCode) {
-        if (keyCode == Canvas.KEY_NUM1) {
-            leftMenuOpen = false;
-            executeCommand();
-        } else if (keyCode == Canvas.KEY_NUM2) {
-            leftMenuOpen = false;
-            if (inputBuffer.length() > 0) {
-                inputBuffer = "";
-                cursorPos = 0;
-            }
-            repaint();
-        } else if (keyCode == Canvas.KEY_NUM3) {
-            leftMenuOpen = false;
-            core.clearScreen();
-            repaint();
-        } else if (keyCode == Canvas.KEY_NUM4) {
-            leftMenuOpen = false;
-            stopCursor();
-            display.setCurrent(mainApp.getMainForm());
-        } else if (keyCode == -7) {
-            leftMenuOpen = false;
-            repaint();
-        }
+    
+    private void toggleMenu() {
+        menuOpen = !menuOpen;
+        selectedMenuItem = 0;
+        repaint();
     }
-
-    private void handleT9(int digit) {
-        long now = System.currentTimeMillis();
-
-        if (digit == lastKeyCode && (now - lastKeyTime) < 1000) {
-            keyPressCount++;
-            t9ReplaceMode = true;
+    
+    private void executeMenuItem() {
+        menuOpen = false;
+        
+        switch (selectedMenuItem) {
+            case 0: executeCommand(); break;
+            case 1: clearScreen(); break;
+            case 2: showHistory(); break;
+            case 3: cycleCompletion(); break;
+            case 4: t9.toggleCase(); break;
+            case 5: t9.toggleNumericMode(); break;
+            case 6: exitTerminal(); break;
+        }
+        
+        repaint();
+    }
+    
+    private void navigateHistory(int direction) {
+        String historyCmd = "";
+        
+        if (direction < 0) {
+            historyCmd = core.getPreviousCommand();
         } else {
-            keyPressCount = 0;
-            t9ReplaceMode = false;
+            historyCmd = core.getNextCommand();
         }
-
-        lastKeyCode = digit;
-        lastKeyTime = now;
-
-        String chars = t9Letters[digit];
-        char ch = chars.charAt(keyPressCount % chars.length());
-
-        if (t9ReplaceMode && cursorPos > 0) {
-            inputBuffer = inputBuffer.substring(0, cursorPos - 1) + inputBuffer.substring(cursorPos);
-            cursorPos--;
-        }
-
-        insertChar(ch);
-    }
-
-    private void insertChar(char c) {
-        inputBuffer = inputBuffer.substring(0, cursorPos) + c + inputBuffer.substring(cursorPos);
-        cursorPos++;
-        repaint();
-    }
-
-    private void insertString(String s) {
-        inputBuffer = inputBuffer.substring(0, cursorPos) + s + inputBuffer.substring(cursorPos);
-        cursorPos += s.length();
-        repaint();
-    }
-
-    private void resetT9() {
-        lastKeyCode = -1;
-        keyPressCount = 0;
-        t9ReplaceMode = false;
-    }
-private void executeCommand() {
-        String cmd = inputBuffer.trim();
-        core.addLine(core.getPrompt() + inputBuffer);
-
-        if (cmd.length() == 0) {
-            inputBuffer = "";
-            cursorPos = 0;
-            core.addLine(core.getPrompt());
+        
+        if (historyCmd != null) {
+            t9.setText(historyCmd);
+            updateCompletions();
             repaint();
+        }
+    }
+    
+    private void updateCompletions() {
+        String input = t9.getText().trim();
+        
+        if (input.length() == 0) {
+            completionList.removeAllElements();
             return;
         }
-
-        String out = core.processCommand(cmd);
         
-        if (out != null && out.equals("EXIT_TERMINAL")) {
-            stopCursor();
-            display.setCurrent(mainApp.getMainForm());
+        int spaceIdx = input.lastIndexOf(' ');
+        String prefix = spaceIdx >= 0 ? input.substring(spaceIdx + 1) : input;
+        
+        if (prefix.length() < 2) {
+            completionList.removeAllElements();
             return;
         }
         
-        if (out != null && out.length() > 0) {
-            Vector v = core.split(out, '\n');
-            for (int i = 0; i < v.size(); i++) {
-                core.addLine((String) v.elementAt(i));
+        completionList.removeAllElements();
+        String lowerPrefix = prefix.toLowerCase();
+        
+        for (int i = 0; i < COMMANDS.length; i++) {
+            if (COMMANDS[i].startsWith(lowerPrefix)) {
+                completionList.addElement(COMMANDS[i]);
             }
         }
-
-        inputBuffer = "";
-        cursorPos = 0;
-        core.addLine(core.getPrompt());
-        resetT9();
+        
+        completionIndex = 0;
+    }
+    
+    private void cycleCompletion() {
+        if (completionList.size() == 0) {
+            updateCompletions();
+            if (completionList.size() == 0) return;
+        }
+        
+        String completion = (String) completionList.elementAt(completionIndex % completionList.size());
+        String input = t9.getText();
+        
+        int spaceIdx = input.lastIndexOf(' ');
+        if (spaceIdx >= 0) {
+            t9.setText(input.substring(0, spaceIdx + 1) + completion);
+        } else {
+            t9.setText(completion);
+        }
+        
+        completionIndex = (completionIndex + 1) % completionList.size();
+        completionList.removeAllElements();
+    }
+    
+    private void executeCommand() {
+        String command = t9.getText().trim();
+        
+        if (command.length() == 0) return;
+        
+        addLine(core.getPrompt() + command);
+        t9.addToHistory(command);
+        
+        String result = core.executeCommand(command);
+        
+        if (result != null) {
+            if (result.equals("CLEAR_SCREEN")) {
+                clearScreen();
+                return;
+            } else if (result.equals("EXIT_TERMINAL")) {
+                exitTerminal();
+                return;
+            } else if (result.startsWith("LAUNCH_")) {
+                handleLaunchCommand(result);
+                return;
+            }
+        }
+        
+        if (result != null && result.length() > 0) {
+            String[] lines = splitLines(result);
+            for (int i = 0; i < lines.length; i++) {
+                addLine(lines[i]);
+            }
+        }
+        
+        addLine(core.getPrompt());
+        t9.clear();
+        scrollOffset = 0;
+        completionList.removeAllElements();
         repaint();
     }
-
-    private void stopCursor() {
+    
+    private void handleLaunchCommand(String cmd) {
+        if (cmd.equals("LAUNCH_CALC")) {
+            mainApp.launchCalculator();
+        } else if (cmd.equals("LAUNCH_EDITOR")) {
+            mainApp.launchTextEditor();
+        } else if (cmd.equals("LAUNCH_SNAKE")) {
+            mainApp.launchSnakeGame();
+        } else if (cmd.equals("LAUNCH_TETRIS")) {
+            mainApp.launchTetrisGame();
+        } else if (cmd.equals("LAUNCH_TASKS")) {
+            mainApp.launchTaskManager();
+        } else if (cmd.equals("LAUNCH_HTTP")) {
+            mainApp.launchHttpClient();
+        }
+    }
+    
+    private void clearScreen() {
+        screenLines.removeAllElements();
+        addLine(core.getPrompt());
+        t9.clear();
+        scrollOffset = 0;
+        completionList.removeAllElements();
+        repaint();
+    }
+    
+    private void showHistory() {
+        Vector history = t9.getHistory();
+        screenLines.removeAllElements();
+        
+        addLine("=== Command History ===");
+        for (int i = 0; i < history.size(); i++) {
+            addLine((i + 1) + ": " + history.elementAt(i));
+        }
+        addLine("");
+        addLine(core.getPrompt());
+        
+        t9.clear();
+        scrollOffset = 0;
+        repaint();
+    }
+    
+    private void exitTerminal() {
+        stop();
+        mainApp.getDisplay().setCurrent(mainApp.getMainForm());
+    }
+    
+    private void addLine(String line) {
+        if (line == null) return;
+        screenLines.addElement(line);
+        
+        if (screenLines.size() > MAX_LINES) {
+            screenLines.removeElementAt(0);
+        }
+    }
+    
+    private String[] splitLines(String text) {
+        Vector lines = new Vector();
+        int start = 0;
+        
+        while (start < text.length()) {
+            int end = text.indexOf('\n', start);
+            if (end == -1) end = text.length();
+            
+            String line = text.substring(start, end);
+            lines.addElement(line);
+            start = end + 1;
+        }
+        
+        String[] result = new String[lines.size()];
+        for (int i = 0; i < lines.size(); i++) {
+            result[i] = (String) lines.elementAt(i);
+        }
+        
+        return result;
+    }
+    
+    public void stop() {
         running = false;
+        
         if (cursorThread != null) {
             try {
                 cursorThread.join();
+            } catch (InterruptedException e) {}
+        }
+        
+        if (timeoutThread != null) {
+            try {
+                timeoutThread.join();
             } catch (InterruptedException e) {}
         }
     }
