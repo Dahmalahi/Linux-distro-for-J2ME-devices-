@@ -632,7 +632,9 @@ Phone 📞 : +225 0788463112
 
 ## 📺 Demo Video
 
-[![DiscoLinux Demo](https://youtube.com/shorts/i7vpmQsC8IY?feature=share)
+
+https://github.com/user-attachments/assets/8ea40f2d-304f-445c-926d-c0828c14b5a3
+
 
 ---
 
