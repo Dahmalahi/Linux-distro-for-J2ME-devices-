@@ -4,7 +4,8 @@
 [![CLDC](https://img.shields.io/badge/CLDC-1.1-green.svg)](https://docs.oracle.com/javame/config/cldc/)
 [![MIDP](https://img.shields.io/badge/MIDP-2.0-orange.svg)](https://docs.oracle.com/javame/config/cldc/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/yourusername/DiscoLinux?style=social)](https://github.com/yourusername/DiscoLinux)
+
+
 <img width="238" height="238" alt="icon" src="https://github.com/user-attachments/assets/53fbdca0-65c3-4e5b-a091-deb90a0d3618" />
 
 > **Transform your feature phone into a powerful Unix/Linux development environment**
